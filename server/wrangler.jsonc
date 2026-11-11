@@ -1,0 +1,74 @@
+// The sync service: ONE shared deployment for every app that syncs through it. Top level = production;
+// env.dev = the dev Worker. An app is a namespace (the /v1/ns/<namespace>/... routes), not a deployment:
+// its devices, document, history and sockets are its own, and MIN_CLIENT is a minimum per namespace.
+// To deploy, copy this file to wrangler.local.jsonc (ignored by git), set the database ids there, and pass
+// --config wrangler.local.jsonc to wrangler (see README.md). Wrangler does NOT inherit bindings,
+// vars or migrations into an environment, so env.dev repeats them.
+//
+// MIN_CLIENT  a JSON object, {"<namespace>":"<version>"}; a namespace with no entry has no minimum.
+//
+// NOTHING SECRET GOES IN THIS FILE. TOKEN_PEPPER and INVITE_SECRET are Worker secrets:
+//   npx wrangler secret put TOKEN_PEPPER [--env dev]
+//   npx wrangler secret put INVITE_SECRET [--env dev]
+// Locally they come from server/.dev.vars (gitignored; see .dev.vars.example).
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "cloud-sync",
+  "main": "src/cloudflare/index.ts",
+  "compatibility_date": "2026-10-01",
+  "compatibility_flags": ["nodejs_compat"],
+  "observability": { "enabled": true },
+
+  "vars": {
+    "HISTORY_LIMIT": "1000",
+    "ENFORCE_ENTITLEMENT": "0",
+    "MIN_CLIENT": "{}"
+  },
+
+  "d1_databases": [
+    {
+      "binding": "DB",
+      "database_name": "cloud-sync",
+      "database_id": "REPLACE_WITH_ID_FROM_wrangler_d1_create",
+      "migrations_dir": "migrations"
+    }
+  ],
+
+  "durable_objects": {
+    "bindings": [{ "name": "ACCOUNT_DOC", "class_name": "AccountDoc" }]
+  },
+  "migrations": [{ "tag": "v1", "new_sqlite_classes": ["AccountDoc"] }],
+
+  // Optional: if the binding is absent the Worker simply skips this limit (the approve-attempt
+  // limit lives in D1 and is always on). Guards pair/start and pair/poll per client IP.
+  "ratelimits": [
+    { "name": "PAIR_LIMITER", "namespace_id": "1001", "simple": { "limit": 30, "period": 60 } }
+  ],
+
+  "env": {
+    "dev": {
+      "name": "cloud-sync-dev",
+      "observability": { "enabled": true },
+      "vars": {
+        "HISTORY_LIMIT": "1000",
+        "ENFORCE_ENTITLEMENT": "0",
+        "MIN_CLIENT": "{}"
+      },
+      "d1_databases": [
+        {
+          "binding": "DB",
+          "database_name": "cloud-sync-dev",
+          "database_id": "REPLACE_WITH_ID_FROM_wrangler_d1_create",
+          "migrations_dir": "migrations"
+        }
+      ],
+      "durable_objects": {
+        "bindings": [{ "name": "ACCOUNT_DOC", "class_name": "AccountDoc" }]
+      },
+      "migrations": [{ "tag": "v1", "new_sqlite_classes": ["AccountDoc"] }],
+      "ratelimits": [
+        { "name": "PAIR_LIMITER", "namespace_id": "1002", "simple": { "limit": 30, "period": 60 } }
+      ]
+    }
+  }
+}

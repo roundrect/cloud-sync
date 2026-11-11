@@ -1,0 +1,8 @@
+# Modules this package must never import. One module name per line.
+SwiftUI
+AppKit
+UIKit
+Metal
+MetalKit
+WebKit
+Yams

@@ -1,0 +1,9 @@
+.DS_Store
+.build/
+.build-remote/
+.swiftpm/
+server/node_modules/
+server/.wrangler/
+server/.celld/
+server/.celld-bin/
+server/.dev.vars

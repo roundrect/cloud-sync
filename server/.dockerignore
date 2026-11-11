@@ -1,0 +1,7 @@
+node_modules
+.celld
+.celld-bin
+.wrangler
+.dev.vars
+test
+wrangler.local.jsonc

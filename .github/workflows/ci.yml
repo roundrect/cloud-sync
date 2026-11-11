@@ -1,0 +1,64 @@
+# Every job runs on RoundRect's SELF-HOSTED Mac runners (labels self-hosted + roundrect-mac, set up by the
+# workspace's Scripts/ci-runners-setup). Never a hosted image: this repo's CI costs nothing.
+#
+# The build runs inside the host's shared ~/Developer/bin/ci-build-lock, so two full builds never starve one box.
+# The package has no dependencies, so no credentials.
+name: cloud-sync
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: cloud-sync-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  package:
+    name: Swift package
+    runs-on: [self-hosted, roundrect-mac]
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          set-safe-directory: false    # the runner's ~/.gitconfig is a symlink git cannot lock (deck-factory 558 §D)
+      - name: Assert the toolchain (Swift 6)
+        run: |
+          swift --version
+          swift --version 2>&1 | grep -q 'Swift version 6\.' || { echo "x expected Swift 6 on the runner" >&2; exit 1; }
+      - name: Neutrality audit
+        run: Scripts/audit.sh
+      - name: Build and test (serialised across repos on the host)
+        shell: bash
+        run: |
+          set -euo pipefail
+          LOCK="$HOME/Developer/bin/ci-build-lock"
+          RUN='swift build && swift test'
+          if [ -x "$LOCK" ]; then "$LOCK" --name "$GITHUB_REPOSITORY#$GITHUB_JOB" -- bash -c "$RUN"; else bash -c "$RUN"; fi
+
+  server:
+    name: Sync server (Worker + celld)
+    runs-on: [self-hosted, roundrect-mac]
+    timeout-minutes: 15
+    defaults:
+      run:
+        working-directory: server
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          set-safe-directory: false    # the runner's ~/.gitconfig is a symlink git cannot lock (deck-factory 558 §D)
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Install, check and test (serialised across repos on the host)
+        shell: bash
+        run: |
+          set -euo pipefail
+          LOCK="$HOME/Developer/bin/ci-build-lock"
+          RUN='npm ci && scripts/install-celld.sh && npm run check && npm test'
+          if [ -x "$LOCK" ]; then "$LOCK" --name "$GITHUB_REPOSITORY#$GITHUB_JOB" -- bash -c "$RUN"; else bash -c "$RUN"; fi

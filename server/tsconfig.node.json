@@ -1,0 +1,20 @@
+{
+  "compilerOptions": {
+    "target": "ES2022",
+    "module": "ES2022",
+    "moduleResolution": "bundler",
+    "lib": ["ES2022"],
+    "types": ["node"],
+    "baseUrl": ".",
+    "paths": { "@harness": ["./test/harness/celld.ts"] },
+    "strict": true,
+    "noUncheckedIndexedAccess": true,
+    "noEmit": true,
+    "skipLibCheck": true,
+    "isolatedModules": true,
+    "resolveJsonModule": true
+  },
+  // The Node half: the vitest side of the celld tests, which spawns celld and talks to it over HTTP. No Workers types, no
+  // worker-configuration.d.ts. core and the contract tests are checked here too, which is how core stays free of both.
+  "include": ["src/core", "test/contract", "test/harness/types.ts", "test/harness/socket.ts", "test/harness/celld.ts", "test/celld/project.ts", "test/celld/celld.test.ts"]
+}

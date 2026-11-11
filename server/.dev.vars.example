@@ -1,0 +1,4 @@
+# Copy to .dev.vars (gitignored) for `make server-dev` and the tests. Local values only;
+# production and dev secrets are set with `wrangler secret put` (see README.md).
+TOKEN_PEPPER=local-dev-pepper-change-me
+INVITE_SECRET=local-dev-invite

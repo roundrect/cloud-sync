@@ -1,0 +1,36 @@
+// The sync service as celld runs it (https://github.com/denoland/celld, pinned in scripts/install-celld.sh): the same
+// Worker that wrangler.jsonc deploys to Cloudflare, self-hosted, with D1 and the Durable Object kept in celld's own
+// SQLite store. celld takes Wrangler-format config but rejects the keys it has no use for (observability, ratelimits,
+// env, routes), so it needs this file rather than wrangler.jsonc. Keep the two in step.
+//
+//   make server-local                       celld dev on 127.0.0.1:8787, state in server/.celld/dev
+//   the Dockerfile                          the same, in a container, state in a volume
+//
+// NOTHING SECRET GOES IN THIS FILE. `celld dev` reads TOKEN_PEPPER and INVITE_SECRET from `.dev.vars` beside it
+// (the Dockerfile's entrypoint writes that file from its environment). `celld deploy` does not read `.dev.vars`;
+// see README.md, "Self-host with celld".
+//
+// There is no pairing rate limit here: celld has no ratelimits binding and no cf-connecting-ip. The Worker skips that
+// limit when PAIR_LIMITER is absent; the limit on wrong approval codes lives in the database and stays on.
+{
+  "name": "cloud-sync",
+  "main": "src/celld/index.ts",
+  "compatibility_date": "2026-10-01",
+  "compatibility_flags": ["nodejs_compat"],
+
+  // migrations/*.sql are imported as text by src/celld/migrate.ts.
+  "rules": [{ "type": "Text", "globs": ["**/*.sql"] }],
+
+  "vars": {
+    "HISTORY_LIMIT": "1000",
+    "ENFORCE_ENTITLEMENT": "0",
+    "MIN_CLIENT": "{}"
+  },
+
+  "d1_databases": [{ "binding": "DB", "database_name": "cloud-sync" }],
+
+  "durable_objects": {
+    "bindings": [{ "name": "ACCOUNT_DOC", "class_name": "AccountDoc" }]
+  },
+  "migrations": [{ "tag": "v1", "new_sqlite_classes": ["AccountDoc"] }]
+}

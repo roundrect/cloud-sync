@@ -1,0 +1,459 @@
+<title>How Cloud Sync Works</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Schibsted+Grotesk:wght@500;700&family=Source+Sans+3:ital,wght@0,400;0,600;1,400&family=JetBrains+Mono:wght@400;500&display=swap">
+<style>
+/* Layout: one reading column; figures and the two-app comparison break out to a wider measure.
+   Colour carries one meaning throughout: blue is the shared library, green is Shorty, violet is Swurl. */
+:root {
+  --bg: #f3f6f9;
+  --panel: #ffffff;
+  --fg: #17212c;
+  --muted: #55636f;
+  --line: #c9d3dc;
+  --lib: #1d5fa8;
+  --lib-soft: #dfeaf6;
+  --shorty: #0f7a5a;
+  --shorty-soft: #dcf0e9;
+  --swurl: #7a3fa8;
+  --swurl-soft: #eee3f6;
+  --warn: #9a5b00;
+  --warn-soft: #f8ecd6;
+  --display: "Schibsted Grotesk", "Helvetica Neue", Arial, sans-serif;
+  --body: "Source Sans 3", "Helvetica Neue", Arial, sans-serif;
+  --mono: "JetBrains Mono", ui-monospace, Menlo, monospace;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #10171e; --panel: #18222c; --fg: #e6edf3; --muted: #9dacb9; --line: #33424f;
+    --lib: #7db4ee; --lib-soft: #1b3248; --shorty: #5fd0ab; --shorty-soft: #16352c;
+    --swurl: #c9a0ec; --swurl-soft: #30213d; --warn: #e7b566; --warn-soft: #3a2c14;
+    color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #10171e; --panel: #18222c; --fg: #e6edf3; --muted: #9dacb9; --line: #33424f;
+  --lib: #7db4ee; --lib-soft: #1b3248; --shorty: #5fd0ab; --shorty-soft: #16352c;
+  --swurl: #c9a0ec; --swurl-soft: #30213d; --warn: #e7b566; --warn-soft: #3a2c14;
+  color-scheme: dark;
+}
+* { box-sizing: border-box; }
+body {
+  background: var(--bg); color: var(--fg);
+  font: 400 18px/1.6 var(--body);
+  padding-left: max(16px, env(safe-area-inset-left, 0px));
+  padding-right: max(16px, env(safe-area-inset-right, 0px));
+  padding-block: 48px 72px;
+}
+main { max-width: 1040px; margin: 0 auto; display: grid; gap: 56px; }
+section { display: grid; gap: 16px; min-width: 0; }
+section > p, section > ul, section > ol, header > p { max-width: 68ch; margin: 0; }
+header { display: grid; gap: 12px; }
+h1, h2, h3 { font-family: var(--display); line-height: 1.15; margin: 0; text-wrap: balance; }
+h1 { font-size: clamp(2.2rem, 5vw, 3.2rem); font-weight: 700; letter-spacing: -0.01em; }
+h2 { font-size: 1.6rem; font-weight: 700; }
+h3 { font-size: 1.1rem; font-weight: 700; }
+.lede { font-size: 1.2rem; color: var(--muted); }
+code { font: 500 0.86em var(--mono); }
+ul, ol { padding-left: 1.2em; display: grid; gap: 6px; }
+
+.terms { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 16px; }
+.term { min-width: 0; }
+.term b { font-family: var(--display); font-size: 1.1rem; display: block; }
+
+figure { margin: 0; display: grid; gap: 10px; min-width: 0; }
+.scroll { overflow-x: auto; background: var(--panel); border: 1px solid var(--line); border-radius: 6px; padding: 12px; }
+figcaption { font-size: 0.95rem; color: var(--muted); max-width: 72ch; }
+svg { display: block; width: 100%; height: auto; min-width: 680px; }
+svg text { font-family: var(--body); font-size: 14px; fill: var(--fg); }
+svg .small { font-size: 12.5px; fill: var(--muted); }
+svg .mono { font-family: var(--mono); font-size: 12px; }
+svg .head { font-family: var(--display); font-weight: 700; font-size: 15px; }
+svg .frame { fill: none; stroke: var(--line); stroke-width: 1.5; }
+svg .lifeline { stroke: var(--line); stroke-width: 1.5; stroke-dasharray: 4 5; }
+svg .box-lib { fill: var(--lib-soft); stroke: var(--lib); stroke-width: 1.5; }
+svg .box-app { fill: var(--shorty-soft); stroke: var(--shorty); stroke-width: 1.5; }
+svg .box-plain { fill: var(--bg); stroke: var(--line); stroke-width: 1.5; }
+svg .wire { stroke: var(--fg); stroke-width: 1.5; fill: none; }
+svg .wire-dash { stroke: var(--fg); stroke-width: 1.5; fill: none; stroke-dasharray: 5 4; }
+svg .tip { fill: var(--fg); }
+svg .accent { fill: var(--lib); font-weight: 600; }
+
+.apps { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 16px; }
+.app { background: var(--panel); border: 1px solid var(--line); border-radius: 6px; padding: 20px; display: grid; gap: 12px; min-width: 0; align-content: start; }
+.app h3 { font-size: 1.35rem; }
+.app.shorty h3 { color: var(--shorty); }
+.app.swurl h3 { color: var(--swurl); }
+.app p { margin: 0; }
+.chip { font: 500 0.72rem var(--mono); letter-spacing: 0.04em; text-transform: uppercase; padding: 2px 8px; border-radius: 3px; justify-self: start; }
+.chip.built { background: var(--shorty-soft); color: var(--shorty); }
+.chip.proposed { background: var(--warn-soft); color: var(--warn); }
+
+.merge { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 10px; }
+.merge > div { min-width: 0; display: grid; gap: 4px; align-content: start; }
+.merge .label { font: 500 0.74rem var(--mono); letter-spacing: 0.04em; text-transform: uppercase; color: var(--muted); }
+pre { margin: 0; background: var(--bg); border: 1px solid var(--line); border-radius: 4px; padding: 10px 12px; font: 400 0.78rem/1.55 var(--mono); overflow-x: auto; }
+pre mark { background: var(--lib-soft); color: inherit; padding: 0 2px; }
+pre mark.a { background: var(--shorty-soft); }
+pre mark.b { background: var(--swurl-soft); }
+pre mark.q { background: var(--warn-soft); }
+
+.table { overflow-x: auto; background: var(--panel); border: 1px solid var(--line); border-radius: 6px; }
+table { border-collapse: collapse; width: 100%; min-width: 640px; font-size: 0.97rem; line-height: 1.45; }
+th, td { text-align: left; vertical-align: top; padding: 10px 14px; border-top: 1px solid var(--line); }
+thead th { border-top: 0; font: 700 0.92rem var(--display); }
+thead th.s { color: var(--shorty); }
+thead th.w { color: var(--swurl); }
+tbody th { font-weight: 600; white-space: nowrap; }
+td.w { background: color-mix(in srgb, var(--warn-soft) 40%, transparent); }
+
+.key { display: flex; flex-wrap: wrap; gap: 8px 18px; font-size: 0.92rem; color: var(--muted); }
+.key span::before { content: ""; display: inline-block; width: 12px; height: 12px; border-radius: 2px; margin-right: 6px; vertical-align: -1px; border: 1.5px solid; }
+.key .k-lib::before { background: var(--lib-soft); border-color: var(--lib); }
+.key .k-app::before { background: var(--shorty-soft); border-color: var(--shorty); }
+
+.status { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 20px; }
+.status > div { min-width: 0; display: grid; gap: 6px; align-content: start; }
+.status ul { margin: 0; font-size: 1rem; }
+</style>
+
+<main>
+  <header>
+    <h1>How Cloud Sync Works</h1>
+    <p class="lede">One document, kept in step across a person's Macs. A shared library and server do the moving; each app decides what its document means. Shorty is the first app on it, and Swurl is next.</p>
+  </header>
+
+  <section>
+    <h2>Two words to keep apart</h2>
+    <div class="terms">
+      <p class="term"><b>Sync</b> moves the document between Macs, through the server. It only ever changes a file.</p>
+      <p class="term"><b>Apply</b> makes one Mac match its file. Only the app knows how. Shorty writes keyboard settings; syncing alone never does.</p>
+    </div>
+  </section>
+
+  <section>
+    <h2>The pieces</h2>
+    <p>Every Mac runs the same library. The library calls one interface, <code>SyncHost</code>, for anything that depends on the app. The server stores revisions of a document it never reads.</p>
+    <figure>
+      <div class="scroll">
+        <svg viewBox="0 0 1000 430" role="img" aria-label="Two Macs each run an app, the shared library and an app-supplied SyncHost. Each library talks to the server over HTTPS and receives new revisions over a WebSocket. The diagram shows the Cloudflare form: a Worker, D1, and one Durable Object per account and app. Only the host touches the file and the Mac.">
+          <defs>
+            <marker id="a1" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse"><path class="tip" d="M0 0L10 5L0 10z"/></marker>
+          </defs>
+          <rect class="frame" x="20" y="16" width="250" height="400" rx="6"/>
+          <rect class="frame" x="730" y="16" width="250" height="400" rx="6"/>
+          <text class="head" x="36" y="42">Mac A</text>
+          <text class="head" x="746" y="42">Mac B</text>
+
+          <g id="macA">
+            <rect class="box-app" x="36" y="56" width="218" height="40" rx="4"/>
+            <text x="145" y="81" text-anchor="middle">App window, menu, CLI</text>
+            <rect class="box-lib" x="36" y="116" width="218" height="140" rx="4"/>
+            <text class="head" x="145" y="176" text-anchor="middle">SyncClient</text>
+            <text class="head" x="145" y="196" text-anchor="middle">CloudSession</text>
+            <text class="small" x="145" y="218" text-anchor="middle">link record, merge base, token</text>
+            <rect class="box-app" x="36" y="276" width="218" height="40" rx="4"/>
+            <text class="head" x="145" y="301" text-anchor="middle">SyncHost</text>
+            <rect class="box-plain" x="36" y="350" width="104" height="48" rx="4"/>
+            <text x="88" y="379" text-anchor="middle">Synced file</text>
+            <rect class="box-plain" x="150" y="350" width="104" height="48" rx="4"/>
+            <text x="202" y="379" text-anchor="middle">This Mac</text>
+            <line class="wire" x1="145" y1="96" x2="145" y2="115" marker-end="url(#a1)"/>
+            <line class="wire" x1="145" y1="256" x2="145" y2="275" marker-end="url(#a1)"/>
+            <line class="wire" x1="88" y1="316" x2="88" y2="349" marker-end="url(#a1)"/>
+            <line class="wire" x1="202" y1="316" x2="202" y2="349" marker-end="url(#a1)"/>
+            <text class="small" x="82" y="337" text-anchor="end">save</text>
+            <text class="small" x="208" y="337">apply</text>
+          </g>
+
+          <g id="macB">
+            <rect class="box-app" x="746" y="56" width="218" height="40" rx="4"/>
+            <text x="855" y="81" text-anchor="middle">App window, menu, CLI</text>
+            <rect class="box-lib" x="746" y="116" width="218" height="140" rx="4"/>
+            <text class="head" x="855" y="176" text-anchor="middle">SyncClient</text>
+            <text class="head" x="855" y="196" text-anchor="middle">CloudSession</text>
+            <text class="small" x="855" y="218" text-anchor="middle">link record, merge base, token</text>
+            <rect class="box-app" x="746" y="276" width="218" height="40" rx="4"/>
+            <text class="head" x="855" y="301" text-anchor="middle">SyncHost</text>
+            <rect class="box-plain" x="746" y="350" width="104" height="48" rx="4"/>
+            <text x="798" y="379" text-anchor="middle">Synced file</text>
+            <rect class="box-plain" x="860" y="350" width="104" height="48" rx="4"/>
+            <text x="912" y="379" text-anchor="middle">This Mac</text>
+            <line class="wire" x1="855" y1="96" x2="855" y2="115" marker-end="url(#a1)"/>
+            <line class="wire" x1="855" y1="256" x2="855" y2="275" marker-end="url(#a1)"/>
+            <line class="wire" x1="798" y1="316" x2="798" y2="349" marker-end="url(#a1)"/>
+            <line class="wire" x1="912" y1="316" x2="912" y2="349" marker-end="url(#a1)"/>
+            <text class="small" x="792" y="337" text-anchor="end">save</text>
+            <text class="small" x="918" y="337">apply</text>
+          </g>
+
+          <text class="head" x="500" y="42" text-anchor="middle">Server (Cloudflare form)</text>
+          <rect class="box-lib" x="410" y="56" width="180" height="50" rx="4"/>
+          <text x="500" y="77" text-anchor="middle">D1</text>
+          <text class="small" x="500" y="95" text-anchor="middle">accounts, devices, pairings</text>
+          <rect class="box-lib" x="410" y="130" width="180" height="50" rx="4"/>
+          <text x="500" y="151" text-anchor="middle">Worker</text>
+          <text class="small" x="500" y="169" text-anchor="middle">checks token and version</text>
+          <rect class="box-lib" x="410" y="210" width="180" height="60" rx="4"/>
+          <text x="500" y="233" text-anchor="middle">AccountDoc</text>
+          <text class="small" x="500" y="251" text-anchor="middle">revisions, open sockets</text>
+          <line class="wire" x1="500" y1="130" x2="500" y2="107" marker-end="url(#a1)"/>
+          <line class="wire" x1="500" y1="180" x2="500" y2="209" marker-end="url(#a1)"/>
+
+          <line class="wire" x1="255" y1="155" x2="409" y2="155" marker-start="url(#a1)" marker-end="url(#a1)"/>
+          <text class="small" x="332" y="146" text-anchor="middle">HTTPS: read, write</text>
+          <line class="wire" x1="591" y1="155" x2="745" y2="155" marker-start="url(#a1)" marker-end="url(#a1)"/>
+          <text class="small" x="668" y="146" text-anchor="middle">HTTPS: read, write</text>
+          <line class="wire-dash" x1="410" y1="240" x2="255" y2="240" marker-end="url(#a1)"/>
+          <text class="small" x="332" y="231" text-anchor="middle">WebSocket: new revision</text>
+          <line class="wire-dash" x1="590" y1="240" x2="745" y2="240" marker-end="url(#a1)"/>
+          <text class="small" x="668" y="231" text-anchor="middle">WebSocket: new revision</text>
+
+          <text class="accent" x="500" y="310" text-anchor="middle">The server stores the document</text>
+          <text class="accent" x="500" y="330" text-anchor="middle">as opaque text. It never parses it.</text>
+        </svg>
+      </div>
+      <div class="key"><span class="k-lib">Shared: the same in every app</span><span class="k-app">Written by each app</span></div>
+      <figcaption>Only <code>SyncHost</code> touches the file or the Mac. Everything above it is identical for Shorty and Swurl. A self-hosted server runs the same Worker under celld, which keeps D1 and the Durable Objects in its own local store.</figcaption>
+    </figure>
+  </section>
+
+  <section>
+    <h2>One edit, from Mac A to Mac B</h2>
+    <p>Revisions form one straight line, numbered from 1. Each write says which revision it was based on, so the server can refuse a write made from out-of-date text.</p>
+    <figure>
+      <div class="scroll">
+        <svg viewBox="0 0 900 470" role="img" aria-label="Sequence: Mac A saves and writes revision 8 based on revision 7. The server stores it and tells Mac B over the WebSocket. Mac B fetches it, merges local edits, saves the file, and the app applies it.">
+          <defs>
+            <marker id="a2" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse"><path class="tip" d="M0 0L10 5L0 10z"/></marker>
+          </defs>
+          <text class="head" x="130" y="26" text-anchor="middle">Mac A</text>
+          <text class="head" x="450" y="26" text-anchor="middle">Server</text>
+          <text class="head" x="770" y="26" text-anchor="middle">Mac B</text>
+          <line class="lifeline" x1="130" y1="38" x2="130" y2="460"/>
+          <line class="lifeline" x1="450" y1="38" x2="450" y2="460"/>
+          <line class="lifeline" x1="770" y1="38" x2="770" y2="460"/>
+
+          <rect class="box-app" x="30" y="50" width="200" height="34" rx="4"/>
+          <text x="130" y="72" text-anchor="middle">Person saves a change</text>
+
+          <line class="wire" x1="130" y1="122" x2="449" y2="122" marker-end="url(#a2)"/>
+          <text class="mono" x="290" y="112" text-anchor="middle">PUT …/doc   If-Match: 7</text>
+
+          <rect class="box-lib" x="350" y="140" width="200" height="34" rx="4"/>
+          <text x="450" y="162" text-anchor="middle">Stores revision 8</text>
+
+          <line class="wire-dash" x1="450" y1="210" x2="131" y2="210" marker-end="url(#a2)"/>
+          <text class="mono" x="290" y="200" text-anchor="middle">rev: 8</text>
+          <line class="wire-dash" x1="450" y1="210" x2="769" y2="210" marker-end="url(#a2)"/>
+          <text class="mono" x="610" y="200" text-anchor="middle">WebSocket: doc, rev 8</text>
+
+          <line class="wire" x1="770" y1="262" x2="451" y2="262" marker-end="url(#a2)"/>
+          <text class="mono" x="610" y="252" text-anchor="middle">GET …/doc</text>
+          <line class="wire-dash" x1="450" y1="306" x2="769" y2="306" marker-end="url(#a2)"/>
+          <text class="mono" x="610" y="296" text-anchor="middle">revision 8, checksum</text>
+
+          <rect class="box-lib" x="640" y="326" width="250" height="50" rx="4"/>
+          <text x="765" y="347" text-anchor="middle">Merges with Mac B's own edits</text>
+          <text class="small" x="765" y="365" text-anchor="middle">using the last synced text as the base</text>
+          <rect class="box-app" x="640" y="396" width="250" height="50" rx="4"/>
+          <text x="765" y="417" text-anchor="middle">Host saves the file</text>
+          <text class="small" x="765" y="435" text-anchor="middle">the app then applies it like any edit</text>
+        </svg>
+      </div>
+      <figcaption>If Mac B was offline it misses nothing. On reconnect the server's first message gives the latest revision, and Mac B catches up the same way, then pushes anything it changed meanwhile.</figcaption>
+    </figure>
+    <h3>When two Macs write at once</h3>
+    <p>Say Mac B pushes with <code>If-Match: 7</code> after the server has reached 8. The server answers 409 with revision 8 attached. Mac B merges, saves the merged file, and pushes again on top of 8. It tries up to four times. If the merge leaves nothing new to send, it stops there. A merge that can't produce a valid document takes the server's version whole and backs the local file up first.</p>
+  </section>
+
+  <section>
+    <h2>Linking another Mac</h2>
+    <p>A Mac joins by showing a code that a Mac already linked approves. No password exists anywhere in this flow. The first Mac creates the account with an invite instead.</p>
+    <figure>
+      <div class="scroll">
+        <svg viewBox="0 0 900 400" role="img" aria-label="Sequence: the new Mac asks the server for a pairing code and shows it. The person types it on a linked Mac, which looks up the device name, confirms, and approves. The new Mac's polling then returns its token, which it stores in the Keychain before adopting the document.">
+          <defs>
+            <marker id="a3" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse"><path class="tip" d="M0 0L10 5L0 10z"/></marker>
+          </defs>
+          <text class="head" x="130" y="26" text-anchor="middle">New Mac</text>
+          <text class="head" x="450" y="26" text-anchor="middle">Server</text>
+          <text class="head" x="770" y="26" text-anchor="middle">Linked Mac</text>
+          <line class="lifeline" x1="130" y1="38" x2="130" y2="390"/>
+          <line class="lifeline" x1="450" y1="38" x2="450" y2="390"/>
+          <line class="lifeline" x1="770" y1="38" x2="770" y2="390"/>
+
+          <line class="wire" x1="130" y1="70" x2="449" y2="70" marker-end="url(#a3)"/>
+          <text class="mono" x="290" y="60" text-anchor="middle">POST …/pair/start</text>
+          <line class="wire-dash" x1="450" y1="110" x2="131" y2="110" marker-end="url(#a3)"/>
+          <text class="mono" x="290" y="100" text-anchor="middle">code K7QF-M2XD, 10 minutes</text>
+
+          <path class="wire-dash" d="M130 140 H769" marker-end="url(#a3)"/>
+          <rect x="356" y="128" width="188" height="24" fill="var(--panel)"/>
+          <text x="450" y="145" text-anchor="middle">Person types the code</text>
+
+          <line class="wire" x1="770" y1="192" x2="451" y2="192" marker-end="url(#a3)"/>
+          <text class="mono" x="610" y="182" text-anchor="middle">approve: code</text>
+          <line class="wire-dash" x1="450" y1="232" x2="769" y2="232" marker-end="url(#a3)"/>
+          <text class="mono" x="610" y="222" text-anchor="middle">device name</text>
+          <line class="wire" x1="770" y1="272" x2="451" y2="272" marker-end="url(#a3)"/>
+          <text class="mono" x="610" y="262" text-anchor="middle">approve: code, confirm</text>
+
+          <line class="wire" x1="130" y1="312" x2="449" y2="312" marker-end="url(#a3)"/>
+          <text class="mono" x="290" y="302" text-anchor="middle">POST …/pair/poll, every 2 s</text>
+          <line class="wire-dash" x1="450" y1="344" x2="131" y2="344" marker-end="url(#a3)"/>
+          <text class="mono" x="290" y="336" text-anchor="middle">approved, token (once)</text>
+
+          <rect class="box-lib" x="30" y="356" width="260" height="34" rx="4"/>
+          <text x="160" y="378" text-anchor="middle">Keychain, then adopt the document</text>
+        </svg>
+      </div>
+      <figcaption>The linked Mac sees the new device's name before it confirms. Five wrong codes from one device in 10 minutes are refused. The server keeps only a hash of each token.</figcaption>
+    </figure>
+  </section>
+
+  <section>
+    <h2>One server for every app</h2>
+    <p>One deployment serves every app and every Mac. An account is shared across apps, and each app gets its own namespace inside it: a short name in the request path, such as <code>/v1/ns/swurl/doc</code>. A namespace holds that app's document, revisions and live connections, and it exists once something is written to it, so a new app needs no server change.</p>
+    <div class="table">
+      <table>
+        <thead><tr><th scope="col">Rule</th><th scope="col">What it means</th></tr></thead>
+        <tbody>
+          <tr><th scope="row">A token belongs to one namespace</th><td>A leaked Swurl token can't read Shorty's document. Using it on another app's routes is refused with 403</td></tr>
+          <tr><th scope="row">Each app links on each Mac</th><td>Tokens live in each app's own Keychain item, so a Mac shows once per app in the device list</td></tr>
+          <tr><th scope="row">Approving a new Mac</th><td>A Mac approves for its own app. It can also approve for an app the account has never had a device in, so that app's first Mac has someone to ask. That approval lapses if the app gains a device before the new Mac collects its token</td></tr>
+          <tr><th scope="row">Rename and remove</th><td>Only within the app's own namespace, so a leaked token can't sign another app out. Removing a lost Mac takes one step per app</td></tr>
+          <tr><th scope="row">Envelope only</th><td>The server checks the format's shape, the schema number, the checksum and the size, never the body. Each app refuses a format or schema it can't read</td></tr>
+          <tr><th scope="row">Minimum versions</th><td>Set per namespace. A namespace with no entry has no minimum</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <p>The same Worker runs in two places, and one set of tests holds both to the same behaviour. On <b>Cloudflare</b> it's a Worker, D1 and Durable Objects, which works on the free plan for a handful of Macs. <b>Self-hosted</b> it runs under <a href="https://github.com/denoland/celld">celld</a>, Deno's open-source Workers runtime, as one Docker container with its state in a volume. It needs HTTPS in front of it unless it's on localhost, and it has no rate limit on starting a pairing.</p>
+    <p>Because every app shares the deployment, one outage or bad deploy stops sync for all of them.</p>
+  </section>
+
+  <section>
+    <h2>The same engine, two apps</h2>
+    <p>Both apps sync one text file. They differ in what a change means, which is why merging belongs to the app.</p>
+    <div class="apps">
+      <article class="app shorty">
+        <span class="chip built">Built, running on the dev server</span>
+        <h3>Shorty</h3>
+        <p><b>Use case:</b> you rebind Pin Tab on your MacBook. Your Mac mini gets the new shortcut without you doing anything there.</p>
+        <p>The document is a set of keyed entries, one per app and menu title. Two Macs that edit different entries never conflict.</p>
+        <div class="merge">
+          <div><span class="label">Last synced</span><pre>com.google.Chrome:
+  "Pin Tab": cmd+p</pre></div>
+          <div><span class="label">Mac A changes</span><pre>com.google.Chrome:
+  "Pin Tab": <mark class="a">cmd+shift+p</mark></pre></div>
+          <div><span class="label">Mac B adds</span><pre>com.google.Chrome:
+  "Pin Tab": cmd+p
+  <mark class="b">"New Tab Below": cmd+opt+t</mark></pre></div>
+          <div><span class="label">Merged: both kept</span><pre>com.google.Chrome:
+  "New Tab Below": <mark class="b">cmd+opt+t</mark>
+  "Pin Tab": <mark class="a">cmd+shift+p</mark></pre></div>
+        </div>
+        <p>If both Macs change the same entry, this Mac's value wins, except that an edit beats a delete. After saving, the app applies the file, or waits if <i>Apply Changes Automatically</i> is off.</p>
+      </article>
+      <article class="app swurl">
+        <span class="chip proposed">Proposed, not designed yet</span>
+        <h3>Swurl</h3>
+        <p><b>Use case:</b> you add a rule at work so docs links open in your Work profile. Your laptop at home routes those links the same way.</p>
+        <p>The document is an ordered list: the first match wins, so where a rule sits is part of its meaning. The file also keeps your comments.</p>
+        <div class="merge">
+          <div><span class="label">Last synced</span><pre>rules:
+  # Client work first
+  - name: Docs
+    open: work
+  - name: Video
+    open: home</pre></div>
+          <div><span class="label">Mac A inserts above</span><pre>rules:
+  # Client work first
+  <mark class="a">- name: Client
+    open: client</mark>
+  - name: Docs
+    open: work
+  - name: Video
+    open: home</pre></div>
+          <div><span class="label">Mac B moves Video up</span><pre>rules:
+  <mark class="b">- name: Video
+    open: home</mark>
+  # Client work first
+  - name: Docs
+    open: work</pre></div>
+          <div><span class="label">Merged: needs a design</span><pre>rules:
+  <mark class="q">Client or Video first?
+  Where does the comment go?</mark></pre></div>
+        </div>
+        <p>Keyed merging can't answer this, so Swurl supplies its own merge. A rule name is optional, so a rule has no reliable identity yet either.</p>
+      </article>
+    </div>
+    <div class="table">
+      <table>
+        <thead>
+          <tr><th scope="col">What the host decides</th><th scope="col" class="s">Shorty</th><th scope="col" class="w">Swurl (proposed)</th></tr>
+        </thead>
+        <tbody>
+          <tr><th scope="row">The file</th><td><code>shortcuts.yaml</code></td><td class="w"><code>swurl.yaml</code>, wherever the person moved it</td></tr>
+          <tr><th scope="row">Text that travels</th><td>Regenerated in a standard form</td><td class="w">The file exactly as it stands, comments included</td></tr>
+          <tr><th scope="row">Writing the file</th><td><code>RawConfig.save</code>, with its backups</td><td class="w">Swurl's own writer, with its lock and backups</td></tr>
+          <tr><th scope="row">Merge</th><td><code>KeyedMerge</code> plus group and move rules</td><td class="w">Its own, aware of order</td></tr>
+          <tr><th scope="row">Never upload if</th><td>The validator reports errors</td><td class="w"><code>swurl validate</code> reports errors</td></tr>
+          <tr><th scope="row">Apply</th><td>Writes this Mac's keyboard settings</td><td class="w">Reloads rules and shortcuts; touches nothing else</td></tr>
+          <tr><th scope="row">Stays on this Mac</th><td>Which shortcuts Shorty owns here</td><td class="w">Link history, icons, and possibly remembered sites</td></tr>
+          <tr><th scope="row">Open question</th><td>None for the engine</td><td class="w">A target like <code>profile: Default</code> may mean a different profile on each Mac. Does a target sync, or stay per Mac?</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  <section>
+    <h2>When something is wrong</h2>
+    <p>Sync never guesses when it can wait. Each state below shows in the app, and only the first retries by itself.</p>
+    <div class="table">
+      <table>
+        <thead><tr><th scope="col">State</th><th scope="col">What happened</th><th scope="col">What sync does</th></tr></thead>
+        <tbody>
+          <tr><th scope="row">Offline</th><td>The connection dropped</td><td>Retries after 1 s, 2, 4 and so on, up to 5 minutes, sooner on wake or a network change</td></tr>
+          <tr><th scope="row">Waiting for a valid file</th><td>The file can't be read, or has errors</td><td>Sends nothing and holds remote changes until the next edit fixes it</td></tr>
+          <tr><th scope="row">File moved</th><td>The app now uses a different file than the one linked</td><td>Stops until the person pulls, or force-pushes that file</td></tr>
+          <tr><th scope="row">Removed</th><td>Another Mac revoked this one</td><td>Stops. The file stays as it is</td></tr>
+          <tr><th scope="row">Update needed</th><td>This build is below the server's minimum, or the document is newer than it can read</td><td>Stops and asks for an update</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <p>Any revision can be restored. Restoring adds a new revision with the old text, so nothing in the history is lost. Each app's document keeps its latest 1,000 revisions.</p>
+  </section>
+
+  <section>
+    <h2>Where this stands on 5 November 2026</h2>
+    <div class="status">
+      <div>
+        <h3>Library</h3>
+        <ul>
+          <li>Private repo <code>cloud-sync-prelaunch</code></li>
+          <li>Client, and one server core for Cloudflare and self-hosting</li>
+          <li>Namespaces built, with no compatibility with the earlier server</li>
+          <li>Not tagged, and no app uses it yet</li>
+        </ul>
+      </div>
+      <div>
+        <h3>Shorty</h3>
+        <ul>
+          <li>Sync built in-app on its feature branch</li>
+          <li>Two Macs linked on the dev server</li>
+          <li>Live two-way test not done yet</li>
+          <li>Moves onto the library next; linked Macs link again once</li>
+        </ul>
+      </div>
+      <div>
+        <h3>Swurl</h3>
+        <ul>
+          <li>Not started</li>
+          <li>Needs decisions on what syncs, and on ordered merging</li>
+        </ul>
+      </div>
+    </div>
+  </section>
+</main>

@@ -1,0 +1,19 @@
+{
+  "compilerOptions": {
+    "target": "ES2022",
+    "module": "ES2022",
+    "moduleResolution": "bundler",
+    "lib": ["ES2022"],
+    "types": ["@cloudflare/workers-types", "@cloudflare/vitest-plugin/types", "./worker-configuration.d.ts"],
+    "baseUrl": ".",
+    "paths": { "@harness": ["./test/harness/workers.ts"] },
+    "strict": true,
+    "noUncheckedIndexedAccess": true,
+    "noEmit": true,
+    "skipLibCheck": true,
+    "isolatedModules": true,
+    "resolveJsonModule": true
+  },
+  // The Workers half. Workers types and Node types conflict, so the Node half (the test code that runs celld) is tsconfig.node.json; core is in both.
+  "include": ["src/core", "src/cloudflare", "src/celld", "test/contract", "test/harness/types.ts", "test/harness/workers.ts", "test/workers", "test/celld/entry.ts", "worker-configuration.d.ts"]
+}
