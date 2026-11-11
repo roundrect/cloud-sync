@@ -28,14 +28,6 @@ targets: [
 
 The package identity SwiftPM derives is the lowercased last URL component, which must stay `cloud-sync`.
 
-> **Prelaunch note.** Until this repo is unveiled publicly, the URL above is not yet reachable.
-> Consumers keep the public URL in their manifest and redirect it to `cloud-sync-prelaunch` with a
-> SwiftPM mirror, supplied only in remote mode:
->
-> ```bash
-> swift build --config-path Scripts/swiftpm-remote-config
-> ```
-
 ## Adopting it in an app
 
 Implement `SyncHost`, then give a `SyncClient` your host, a transport, a token store and a folder:
